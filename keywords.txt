@@ -1,0 +1,23 @@
+#######################################
+# Syntax Highlighting for ESP32Sound
+#######################################
+
+#######################################
+# Datatypes (KEYWORD1)
+#######################################
+
+ESP32Sound			KEYWORD1
+
+#######################################
+# Methods and Functions (KEYWORD2)
+#######################################
+
+begin			KEYWORD2
+playSound		KEYWORD2
+stopSound		KEYWORD2
+isPlaying		KEYWORD2
+playFx			KEYWORD2
+setPlaybackRate	KEYWORD2
+setFxVolume		KEYWORD2
+setSoundVolume	KEYWORD2
+

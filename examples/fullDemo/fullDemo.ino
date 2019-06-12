@@ -12,6 +12,8 @@
 #include "sounds.h"
 
 #define PLAYBACK_RATE  16000
+#define BUFFER_SIZE  1024
+
 #define MAX_SOUNDFILES 10
 #define MAX_SOUNDFILENAME_LEN 16
 
@@ -25,7 +27,7 @@ uint16_t actPlaybackRate = PLAYBACK_RATE;
 void setup(){
     Serial.begin(115200);
     Serial.println("Now initialising SD card!");
-    if(!SD.begin()){
+    if(!SD.begin(SS,SPI,8000000,"/sd",5)){
         Serial.println("Card Mount Failed");
         return;
     }
@@ -42,7 +44,7 @@ void setup(){
     GO.lcd.setTextSize(2);
 
     Serial.println("Now initialising sound system!");
-    ESP32Sound.begin(PLAYBACK_RATE);
+    ESP32Sound.begin(PLAYBACK_RATE,BUFFER_SIZE);
 }
 
 void loop(){

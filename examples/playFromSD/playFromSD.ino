@@ -13,10 +13,9 @@
 #define PLAYBACK_RATE  16000
 
 void setup(){
-    GO.begin();
     Serial.begin(115200);
     Serial.println("Now initialising SD card!");
-    if(!SD.begin()){
+    if(!SD.begin(SS,SPI,8000000,"/sd",5)){
         Serial.println("Card Mount Failed");
         return;
     }
@@ -24,6 +23,8 @@ void setup(){
         Serial.println("No SD card attached");
         return;
     }
+
+    GO.begin();
     Serial.println("Now initialising sound system!");
     ESP32Sound.begin(PLAYBACK_RATE);
 }

@@ -10,8 +10,8 @@
 
 #define SPEAKER_PIN 26
 #define TONE_PIN_CHANNEL 0
-#define SOUNDBUF_SIZE 4096
-#define SOUNDBUF_HALF (SOUNDBUF_SIZE/2)
+#define DEFAULT_SAMPLINGRATE 16000
+#define DEFAULT_SOUNDBUF_SIZE 4096
 #define DEFAULT_SOUND_VOLUME 30
 #define DEFAULT_FX_VOLUME 50
 
@@ -26,7 +26,8 @@ class ESP32Sound_Class {
     static void soundTimer();   // the timer ISR
 
     static File soundFile;
-    static uint8_t buf[SOUNDBUF_SIZE];
+    static uint8_t * buf; //[1024];
+    static uint16_t bufsize;
     static volatile uint16_t sampleCounter;
     static volatile uint16_t lastSample;
     static volatile int16_t loadNext;
@@ -37,7 +38,8 @@ class ESP32Sound_Class {
     static volatile uint8_t soundVolume;
  
   public: 
-    static void begin(uint16_t samplingrate);              // initialize system, set playback rate
+    // initialize system, set playback rate and buffer size
+    static void begin(uint16_t samplingrate=DEFAULT_SAMPLINGRATE, uint16_t size=DEFAULT_SOUNDBUF_SIZE);
     static void playSound(fs::FS &fs, const char * path);  // start music playback from file
     static boolean isPlaying();                  // true if music is playing, false otherwise 
     static void stopSound();                     // stops playback

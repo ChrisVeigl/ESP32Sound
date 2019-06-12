@@ -170,8 +170,10 @@ void setup() {
   delay(500);
   Serial.print("Initializing SD card...");
   // see if the card is present and can be initialized:
-  if (!SD.begin()) Serial.println("Card failed, or not present");
-  else Serial.println("card initialized.");
+  if(!SD.begin(SS,SPI,8000000,"/sd",5))
+      Serial.println("Card failed, or not present");
+  else 
+      Serial.println("card initialized.");
 
   if (!EEPROM.begin(10))  Serial.println("failed to initialise EEPROM");
 

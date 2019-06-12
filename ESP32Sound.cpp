@@ -42,10 +42,12 @@ TaskHandle_t      ESP32Sound_Class::xHandle = NULL;
 File              ESP32Sound_Class::soundFile;
 volatile uint8_t  ESP32Sound_Class::soundVolume = DEFAULT_SOUND_VOLUME;
 volatile uint8_t  ESP32Sound_Class::fxVolume = DEFAULT_FX_VOLUME;
-uint8_t           ESP32Sound_Class::buf[SOUNDBUF_SIZE];
-volatile uint16_t ESP32Sound_Class::sampleCounter = 0;
-volatile uint16_t ESP32Sound_Class::lastSample = SOUNDBUF_HALF;
-volatile int16_t  ESP32Sound_Class::loadNext = 0;
+//uint8_t *         ESP32Sound_Class::buf = NULL;
+uint8_t   *        ESP32Sound_Class::buf;//[1024];
+uint16_t          ESP32Sound_Class::bufsize;
+volatile uint16_t ESP32Sound_Class::sampleCounter;
+volatile uint16_t ESP32Sound_Class::lastSample;
+volatile int16_t  ESP32Sound_Class::loadNext;
 const uint8_t *   ESP32Sound_Class::playFXLoc = NULL;
 volatile uint16_t ESP32Sound_Class::playFXLen = 0;
 volatile uint8_t  ESP32Sound_Class::playStream = 0;
@@ -64,22 +66,22 @@ void IRAM_ATTR ESP32Sound_Class::soundTimer(){
   // mix streaming samples
   if (playStream) {
     dacValue+=(buf[sampleCounter]-127)*soundVolume/100;
-    portENTER_CRITICAL_ISR(&mux);
+ //   portENTER_CRITICAL_ISR(&mux);
     sampleCounter++;
     if (sampleCounter == lastSample) {
       // switch to the other buffer 
-      if (lastSample == SOUNDBUF_HALF) {
-        lastSample=SOUNDBUF_SIZE;
-        loadNext=0;
-      } else {
+      if (lastSample == bufsize) {
         sampleCounter=0;
-        lastSample=SOUNDBUF_HALF;              
-        loadNext=SOUNDBUF_HALF;
+        loadNext=bufsize/2;              
+        lastSample=loadNext;
+      } else {
+        lastSample=bufsize;
+        loadNext=0;
       }
       // signal to soundStreamTask that buffer finished -> load next
       xSemaphoreGiveFromISR(xSemaphore, NULL);    
     }
-    portEXIT_CRITICAL_ISR(&mux);
+  //  portEXIT_CRITICAL_ISR(&mux);
   }
   dacWrite(SPEAKER_PIN, dacValue); 
 
@@ -90,16 +92,17 @@ void IRAM_ATTR ESP32Sound_Class::soundTimer(){
   }
 }
 
-void ESP32Sound_Class::begin(uint16_t samplingrate)  {
+void ESP32Sound_Class::begin(uint16_t samplingrate, uint16_t size)  {
     ledcSetup(TONE_PIN_CHANNEL, 0, 13);
     ledcAttachPin(SPEAKER_PIN, TONE_PIN_CHANNEL);
 
-    xSemaphore = xSemaphoreCreateMutex();
-
+    xSemaphore = xSemaphoreCreateMutex();  
+    Serial.printf("init sound: SR=%d, size=%d\n",samplingrate,size);
+    bufsize=size;
     timer = timerBegin(0, 80, true);   // prescaler 80 : 1MHz
+    timerAlarmDisable(timer);
     timerAttachInterrupt(timer, &soundTimer, true);
     timerAlarmWrite(timer, 1000000/samplingrate, true);  // periodic timer call with ~samplingrate
-    timerAlarmDisable(timer);
 }
 
 void ESP32Sound_Class::playSound(fs::FS &fs, const char * path){
@@ -107,7 +110,7 @@ void ESP32Sound_Class::playSound(fs::FS &fs, const char * path){
       Serial.printf("sound already playing!\n");
       return;
     }
-    
+
     soundFile = fs.open(path);   
     if(soundFile){
         Serial.printf("open file %s successful!\n", path);
@@ -168,24 +171,31 @@ void ESP32Sound_Class::setSoundVolume(uint8_t vol){
 void ESP32Sound_Class::soundStreamTask( void * parameter )
 { 
     uint8_t first=1;
+    uint16_t readsize=bufsize/2;
     size_t len = 0;
     uint32_t start = millis();
     uint32_t end = start;
 
     Serial.println("SoundStreamTask created");    
+    if (buf==NULL) buf=(uint8_t *)calloc(bufsize,1);
     len = soundFile.size();
     size_t flen = len;
     start = millis();
     portENTER_CRITICAL(&mux);             
     loadNext=0;
+    lastSample=readsize;
     sampleCounter=0;
     portEXIT_CRITICAL(&mux);             
     while(len>0 ) { 
         size_t toRead = len;
-        if(toRead > SOUNDBUF_HALF) toRead = SOUNDBUF_HALF;
-        // load half of the buffer (the half the timer ISR is currently not reading!)
-        soundFile.read(buf+loadNext, toRead);
-        // Serial.printf("*");
+        if(toRead > readsize) toRead = readsize;
+        // load half of the buffer (timer ISR is currently processing the other half!)
+        int readbytes=soundFile.read((uint8_t *)buf+loadNext, toRead);
+        if (readbytes < toRead) {
+           Serial.printf("\nread file error, %d of %d bytes read!\n",readbytes,toRead);
+          //Serial.print(*(buf+loadNext));
+          //TBD: handle permanent read problems, e.g. reopen file ?
+        }   
         if (first) {
             portENTER_CRITICAL(&mux);             
             playStream=1;

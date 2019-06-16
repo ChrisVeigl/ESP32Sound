@@ -20,4 +20,6 @@ playFx			KEYWORD2
 setPlaybackRate	KEYWORD2
 setFxVolume		KEYWORD2
 setSoundVolume	KEYWORD2
+setVerbosity	KEYWORD2
+getPeak	        KEYWORD2
 

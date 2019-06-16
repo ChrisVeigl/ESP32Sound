@@ -15,7 +15,7 @@
 void setup(){
     Serial.begin(115200);
     Serial.println("Now initialising SD card!");
-    if(!SD.begin(SS,SPI,8000000,"/sd",5)){
+    if(!SD.begin()){
         Serial.println("Card Mount Failed");
         return;
     }

@@ -1,21 +1,27 @@
+//
+// ODROID-GO  Flappy Bird
+//
 // By Ponticelli Domenico.
 // https://github.com/pcelli85/M5Stack_FlappyBird_game
 //
 // Added to by: Victor G. Brusca
 // https://github.com/vbrusca/FlappyBirdCloneOdroidGo
 //
-// Anim, sound and eeprom functions contributed by Chris Veigl
+// More extensions (sound, highscore & bird anim) by CV
 // https://github.com/ChrisVeigl/ESP32Sound
 // 
-// For background music move file "data/swan.raw" to root folder of SD-Card !
+// For background music, copy file 'data/swan.raw' to root folder of SD-Card !
+// Yes! - It's flappy Swan Lake !! ;-)
+// 
+// Use menu and volume button to change fx/music volume.
+// Enter the hall-of-fame using navigation cross!
+// Clear highscore by pressing Select and Start!
 //
-
 
 #include <odroid_go.h>
 #include "ESP32Sound.h"
 #include "sounds.h"
 #include <EEPROM.h>
-#include <SPI.h>
 
 //screen dimensions
 #define TFT_X_S           0
@@ -47,7 +53,12 @@ int GAPHEIGHT = 85; //65 - 85
 #define GRASSH            4 //grass height, starts at floor y
 
 int maxScore = 0;
-const int buttonPin = 2;
+char maxName[4]="   ";
+uint8_t letterPos=0;
+uint8_t letterIndex=0;
+uint8_t actFxVolume=20;
+uint8_t actSoundVolume=30;
+
 
 //background
 const unsigned int BCKGRDCOL = GO.lcd.color565(138, 235, 244);
@@ -158,29 +169,31 @@ float lastVelY = 0.0;
 long gamePauseStart;
 const int chipSelect = 7;
 
-//bool sdCardOn = false;
-//const int len = 8000;
-//uint8_t buff[len];
-//uint16_t rate = 1000;
-//File file;
-//int idx = 0;
-
 void setup() {
   Serial.begin(115200);
   delay(500);
   Serial.print("Initializing SD card...");
   // see if the card is present and can be initialized:
-  if(!SD.begin(SS,SPI,8000000,"/sd",5))
+  if(!SD.begin())
       Serial.println("Card failed, or not present");
   else 
       Serial.println("card initialized.");
 
-  if (!EEPROM.begin(10))  Serial.println("failed to initialise EEPROM");
+  if (!EEPROM.begin(5))  
+      Serial.println("failed to initialize EEPROM");
+  
+  randomSeed(analogRead(0));   //generate new random seed for the pipe gap
+  // gotcha: do this before GO.begin() - else Volume button won't work!
 
+  GO.begin();
+  ESP32Sound.begin(16000);
+  ESP32Sound.setSoundVolume(actSoundVolume);
+  ESP32Sound.setFxVolume(actFxVolume);
   gameInit();  
 }
 
 void loop() { 
+  GO.update();
   if(gameBegin) {
     gameStart();
   }else if(!gameBegin && !gameEnd) {
@@ -201,9 +214,7 @@ void loop() {
         }
       }
 
-      GO.BtnB.read();
       lstop = millis();
-      
       lastFrameMs = (lstop - lstart);
       actualFps = 1000.0 / lastFrameMs;
       extraMs = lastFrameMs - targetFpsMs;
@@ -215,7 +226,6 @@ void loop() {
   }else {
     gameOver();
   }
-
   loops++;
 }
 
@@ -399,7 +409,8 @@ void update() {
     pipes.x = TFTW;
     GO.lcd.fillRect(0, TFT_Y_S, 10, GAMEH - TFT_Y_S, BCKGRDCOL);
     pipes.gap_y = random(10, (GAMEH - (10 + GAPHEIGHT)));
-    GAPHEIGHT = random(55, 85);    
+    int minHeight= 65-score/2; if (minHeight<50) minHeight=50;
+    GAPHEIGHT = random(minHeight, 85-score);  // well - it gets harder ;-)
     if((pipes.gap_y + GAPHEIGHT) >= (TFTH - FLOORH - TFT_Y_S)) {
       pipes.gap_y -= 40;
     }
@@ -408,7 +419,8 @@ void update() {
   //bird
   if(onGravity && loops >= 3) {
     bird.vel_y += (GRAVITY * delta);
-    bird.y += bird.vel_y;
+    if ((bird.y>20) || (bird.vel_y>0))
+      bird.y += bird.vel_y;
   }
 
   if(onCollision) {
@@ -431,7 +443,10 @@ void update() {
       dirtyScore = true;
       score++;
     }
-    if (gamePause)  ESP32Sound.playFx(fx2);
+    if (gamePause) {
+        ESP32Sound.stopSound();
+        ESP32Sound.playFx(fx2);
+    }
 
   }
 }
@@ -441,6 +456,9 @@ void gameLoop() {
   drawPipe();
   drawBird();
   drawScore();
+  if (!ESP32Sound.isPlaying() && !gamePause) {
+    ESP32Sound.playSound(SD, "/swan.raw");
+  }
 }
 
 void gameStart() {
@@ -467,7 +485,6 @@ void gameStart() {
 
 
     GO.lcd.setTextColor(TFT_WHITE);
-
     GO.lcd.setCursor(TFTW2 - (17 * 6) + 5, TFTH2 + 46);
     GO.lcd.println("Press A to Start");
 
@@ -478,20 +495,31 @@ void gameStart() {
     GO.lcd.setCursor(TFTW2 - (17 * 3) + 5, TFTH - 35);
     GO.lcd.println("Middlemind Games");
 
-    GO.lcd.setTextColor(TFT_RED);
-    GO.lcd.setTextSize(1);
-    GO.lcd.setCursor(220,60);
-    GO.lcd.print("Highscore:");
-    GO.lcd.print(maxScore);
+    GO.lcd.setCursor(10, 225);
+    GO.lcd.printf("FX:%d",actFxVolume);
+    GO.lcd.setCursor(270, 225);
+    GO.lcd.printf("Vol:%d",actSoundVolume);
 
-    GO.lcd.setTextSize(2);
-    GO.Speaker.mute();
+    printMaxScore();
   }
   
   //wait for push button
-  //GO.update();
-  GO.Speaker.mute();
-  silentUpdate();
+  if ((GO.BtnSelect.isPressed()) && (GO.BtnStart.isPressed()))  { 
+      resetMaxScore();
+      dirty=true;
+  }
+  if (GO.BtnMenu.wasPressed()) { 
+      actFxVolume+=10; 
+      if (actFxVolume>100) actFxVolume=0; 
+      ESP32Sound.setFxVolume(actFxVolume);
+      dirty=true;
+  }
+  if (GO.BtnVolume.wasPressed()) { 
+      actSoundVolume+=10; 
+      if (actSoundVolume>100) actSoundVolume=0; 
+      ESP32Sound.setSoundVolume(actSoundVolume);
+      dirty=true;
+  } 
   if(GO.BtnA.wasPressed()) {
     gameBegin = false;
     gameEnd = false;
@@ -499,18 +527,32 @@ void gameStart() {
     gameCdStart = millis();
     dirtyScore = true;
     drawLevel();
-    ESP32Sound.playSound(SD, "/swan.raw");
-
   }
 }
 
+void printMaxScore() {
+  GO.lcd.setTextColor(TFT_RED,TFT_BLACK);
+  GO.lcd.setTextSize(1);
+  GO.lcd.setCursor(190,60);
+  if (strcmp(maxName,"   ")) {
+    GO.lcd.print("Highscore: ");
+    GO.lcd.print(maxScore);
+    GO.lcd.print(" by ");
+    GO.lcd.print(maxName);
+  }
+  else {
+    GO.lcd.print("Highscore cleared ! ");
+  }
+  GO.lcd.setTextSize(2);
+}
+
 void gameInit() {
-    
-  GO.begin();
-  // GO.Speaker.mute();
-  // resetMaxScore();
-  maxScore=(int)EEPROM.read(0);
-  
+  if(EEPROM.read(4) == 42) { 
+    maxScore=(int)EEPROM.read(0);
+    maxName[0]=EEPROM.read(1);
+    maxName[1]=EEPROM.read(2);
+    maxName[2]=EEPROM.read(3);
+  }
   //clear screen
   GO.lcd.fillScreen(BCKGRDCOL);
 
@@ -523,10 +565,7 @@ void gameInit() {
   bird.y = bird.old_y = (TFTH2 - BIRDH);
   bird.vel_y = 0;//-JUMP_FORCE;
   tmpx = tmpy = 0;
-
-  //generate new random seed for the pipe gap
-  randomSeed(analogRead(0));
-
+ 
   //init pipe
   pipes.x = TFTW;
   pipes.gap_y = random(10, (GAMEH - (10 + GAPHEIGHT)));
@@ -535,39 +574,13 @@ void gameInit() {
   }
 
   dirty = true;
-
-
-  ESP32Sound.begin(16000);
-  ESP32Sound.setSoundVolume(30);
-  ESP32Sound.setFxVolume(20);
-
-}
-
-
-void silentUpdate() {
-    //Button update
-    GO.BtnA.read();
-    GO.BtnB.read();
 }
 
 
 void gameOver() {
-
-  ESP32Sound.stopSound();
-
   if(dirty) {
     dirty = false;  
     GO.lcd.fillScreen(TFT_BLACK);
-  
-    if(score > maxScore) {
-      EEPROM.write(0,(byte)score);
-      EEPROM.commit();
-      maxScore = score;
-      GO.lcd.setTextColor(TFT_RED);
-      GO.lcd.setTextSize(2);
-      GO.lcd.setCursor(TFTW2 - (13*6), TFTH2 - 36);
-      GO.lcd.println("NEW HIGHSCORE");
-    }
   
     GO.lcd.setTextColor(TFT_WHITE);
     GO.lcd.setTextSize(3);
@@ -579,33 +592,87 @@ void gameOver() {
     GO.lcd.setCursor(10, 10);
     GO.lcd.print("Score: ");
     GO.lcd.print(score);
-  
-    GO.lcd.setCursor(TFTW2 - (12 * 10) + 3, TFTH2 + 28);
-    GO.lcd.println("Press A to Continue");
-    GO.lcd.setCursor(10, 28);
-    GO.lcd.print("Max Score: ");
-    GO.lcd.print(maxScore);
 
-    GO.Speaker.mute();    
+    if(score > maxScore) {
+      GO.lcd.setTextColor(TFT_RED,TFT_BLACK);
+      GO.lcd.setTextSize(2);
+      GO.lcd.setCursor(TFTW2 - (13*6), TFTH2 - 36);
+      GO.lcd.println("NEW HIGHSCORE");
+      GO.lcd.setCursor(TFTW2 - (12 * 10) + 20, TFTH2 + 28);
+      GO.lcd.print("Enter Name: ");
+      GO.lcd.setCursor(TFTW2 + 50, TFTH2 + 28);
+      strcpy(maxName,"AAA");
+      GO.lcd.print(maxName);
+      letterPos=0;
+      letterIndex=0;
+    }
+    else {
+      GO.lcd.setCursor(TFTW2 - (12 * 10) + 3, TFTH2 + 28);
+      GO.lcd.println("Press A to Continue");
+      GO.lcd.setCursor(10, 28);
+      GO.lcd.print("Max Score: ");
+      GO.lcd.print(maxScore);
+    }
   }
 
-  //wait for push button
-  //GO.update();
-  GO.Speaker.mute();
-  silentUpdate();
-  if(GO.BtnA.wasPressed()) {
-    gameEnd = false;
-    gameBegin = true;
-    dirtyScore = true;
-    lstart = millis();
-    gameInit();
-    //break;  
+  if(score > maxScore) {
+      //Serial.println(GO.JOY_Y.readAxis()); 
+      delay(100);
+      GO.lcd.setCursor(TFTW2 + 50, TFTH2 + 28);
+      if (GO.JOY_Y.isAxisPressed() == 2)  {
+        if (maxName[letterIndex]<'Z')
+          maxName[letterIndex]++;
+        else maxName[letterIndex]='A';
+        GO.lcd.print(maxName);
+        delay(100);
+      }  
+      else if (GO.JOY_Y.isAxisPressed() == 1)  {
+        if (maxName[letterIndex]>'A')
+          maxName[letterIndex]--;
+        else maxName[letterIndex]='Z';
+        GO.lcd.print(maxName);
+        delay(100);
+      } 
+      else if (GO.JOY_X.isAxisPressed() == 2)  {
+        if (letterIndex>0)
+          letterIndex--;
+        else letterIndex=2;
+        delay(200);
+      }
+      else if (GO.JOY_X.isAxisPressed() == 1)  {
+        if (letterIndex<2)
+          letterIndex++;
+        else letterIndex=0;
+        delay(200);
+      }
+      else if(GO.BtnA.wasPressed()) {
+        setMaxScore((byte)score);
+        dirty = true;  
+      }
   }
+  else {
+    //wait for push button
+    if(GO.BtnA.wasPressed()) {
+      gameEnd = false;
+      gameBegin = true;
+      dirtyScore = true;
+      lstart = millis();
+      gameInit();
+    }
+  }
+}
+
+void setMaxScore(byte score) {
+  EEPROM.write(0,score);
+  EEPROM.write(1,maxName[0]);
+  EEPROM.write(2,maxName[1]);
+  EEPROM.write(3,maxName[2]);
+  EEPROM.write(4,42); // the answer to everything!
+  EEPROM.commit();
+  maxScore = score;
 }
 
 void resetMaxScore() {
-  EEPROM.write(0, 0);
-  maxScore=0;
+  strcpy(maxName,"   ");
+  setMaxScore(0);
 }
-
-

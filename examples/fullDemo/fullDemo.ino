@@ -2,8 +2,10 @@
 // Demo for the ESP32Sound library 
 // https://github.com/ChrisVeigl/ESP32Sound
 //
-// This demo shows concurrent playback of music and effects via a user (buttons/LCD).
-// Put multiple .raw music files (8-bit, mono, 16Khz) into root folder of the SD-card.
+// This demo shows concurrent playback of music and effects + LCD user interface.
+// Put the .raw music file from folder '/data' into the root folder of the SD-card,
+// and/or add other (8-bit, mono, 16Khz) sound files there. 
+// See github readme for format conversion infos! 
 //
 
 
@@ -24,10 +26,15 @@ uint8_t actFxVolume = 50;
 uint8_t actSoundVolume = 30;
 uint16_t actPlaybackRate = PLAYBACK_RATE;
 
+
+uint16_t getSoundfiles(fs::FS &fs, const char * dirname, char** fileNames);
+void displayGUI();
+
+
 void setup(){
     Serial.begin(115200);
     Serial.println("Now initialising SD card!");
-    if(!SD.begin(SS,SPI,8000000,"/sd",5)){
+    if(!SD.begin()){
         Serial.println("Card Mount Failed");
         return;
     }
@@ -41,7 +48,7 @@ void setup(){
     
     Serial.println("Now initializing LCD etc.");
     GO.begin();
-    GO.lcd.setTextSize(2);
+    displayGUI();
 
     Serial.println("Now initialising sound system!");
     ESP32Sound.begin(PLAYBACK_RATE,BUFFER_SIZE);
@@ -49,6 +56,8 @@ void setup(){
 
 void loop(){
     static int actButtonState=0, oldButtonState=1234;
+    static unsigned long previousMillis=0;
+    static uint16_t fps=0;
 
     GO.update();
     actButtonState= GO.JOY_Y.isAxisPressed() + (GO.JOY_X.isAxisPressed()<<2) 
@@ -65,14 +74,16 @@ void loop(){
       if (GO.BtnA.isPressed() && soundfileCount)  
           ESP32Sound.playSound(SD, soundfileNames[actSoundfile]);
       if (GO.BtnMenu.isPressed()) { 
-          actFxVolume+=20; 
+          actFxVolume+=10; 
           if (actFxVolume>150) actFxVolume=0; 
           ESP32Sound.setFxVolume(actFxVolume);
+          displayGUI();
       }
       if (GO.BtnVolume.isPressed()) { 
-          actSoundVolume+=20; 
+          actSoundVolume+=10; 
           if (actSoundVolume>150) actSoundVolume=0; 
           ESP32Sound.setSoundVolume(actSoundVolume);
+          displayGUI();
       } 
       if (GO.BtnSelect.isPressed()) { 
           actSoundfile++; 
@@ -83,15 +94,39 @@ void loop(){
           actPlaybackRate+=1000; 
           if (actPlaybackRate>24000) actPlaybackRate=8000; 
           ESP32Sound.setPlaybackRate(actPlaybackRate);
+          displayGUI();
       }
       oldButtonState=actButtonState;
-      displayGUI();
-    }    
-    delay(20);
+      // displayGUI();  // uncomment if you want to see all button updates (slower!)
+    }
+
+    int p=ESP32Sound.getPeak()/6;
+    for (int i=0; i<18;i++) {
+        if (i<p) {
+            if (i>14)
+               GO.lcd.fillRect(290, 220-i*12, 20, 10, RED);
+            else if (i>8)
+               GO.lcd.fillRect(290, 220-i*12, 20, 10, YELLOW);
+            else 
+               GO.lcd.fillRect(290, 220-i*12, 20, 10, GREEN);
+        } 
+        else GO.lcd.fillRect(290, 220-i*12, 20, 10, BLACK);
+    }
+
+    fps++;
+    if (millis() - previousMillis >= 1000) {
+        previousMillis=millis();
+        GO.lcd.setCursor(270,5);
+        GO.lcd.setTextSize(1);
+        GO.lcd.printf("FPS:%d ",fps);
+        fps=0;
+    }
+    delay (10);  // keep some SPI bandwith for sound (in case of heavy LCD traffic) !
 }
 
 void displayGUI() {
     GO.lcd.setCursor(0,0);
+    GO.lcd.setTextSize(2);
     GO.lcd.setTextColor(TFT_RED, TFT_BLACK);
     GO.lcd.println("ODROID-GO Sound Demo!\n");
     GO.lcd.setTextColor(TFT_YELLOW, TFT_BLACK);
@@ -157,4 +192,3 @@ uint16_t getSoundfiles(fs::FS &fs, const char * dirname, char** fileNames){
     }
     return (count);
 }
-

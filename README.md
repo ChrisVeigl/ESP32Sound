@@ -25,10 +25,12 @@ Please note that the maximum supported size for FX raw files is 65535 bytes.
 After including *sounds.h* into your sketch, you can use *playFX(sound1)*, *playFX(sound2)*, ...
 
 ### Implementation infos  
-The current version of the library uses a timer ISR (called with sampling rate) 
-for feeding the sound-samples into the DAC of the ODROID-GO. A dedicated task refills the play buffer
-with sound data from the SD card. The play buffer is spilt in two parts, so that the timer ISR reads from
-the part which is not currently refilled. This enables a continuous playback without breaks / pops. 
+The current version of the library uses a timer ISR (called with sampling rate) for feeding the sound-samples 
+into the DAC of the ODROID-GO. A dedicated task refills the play queue with sound data from the SD card. 
+The soundfile is read in chunks of 512 values. This enables a continuous playback without breaks / pops 
+even if concurrent LCD traffic is ongoing. (Please use a small delay(10) in the main loop to provide sufficient 
+SPI bandwith for sound transfers in case of heavy LCD action ...)
+ 
 Future improvements might use DMA/I2S to increase performance.
 
 This code is released under GPLv3 license.

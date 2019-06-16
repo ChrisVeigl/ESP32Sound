@@ -36,25 +36,27 @@
 // definition/initialisation of the static class members 
 // (the class is a static/singleton!)
 hw_timer_t *      ESP32Sound_Class::timer = NULL;
-SemaphoreHandle_t ESP32Sound_Class::xSemaphore = NULL;
+QueueHandle_t     ESP32Sound_Class::xQueue = NULL;
 portMUX_TYPE      ESP32Sound_Class::mux = portMUX_INITIALIZER_UNLOCKED;
 TaskHandle_t      ESP32Sound_Class::xHandle = NULL;
 File              ESP32Sound_Class::soundFile;
 volatile uint8_t  ESP32Sound_Class::soundVolume = DEFAULT_SOUND_VOLUME;
 volatile uint8_t  ESP32Sound_Class::fxVolume = DEFAULT_FX_VOLUME;
-//uint8_t *         ESP32Sound_Class::buf = NULL;
-uint8_t   *        ESP32Sound_Class::buf;//[1024];
 uint16_t          ESP32Sound_Class::bufsize;
-volatile uint16_t ESP32Sound_Class::sampleCounter;
-volatile uint16_t ESP32Sound_Class::lastSample;
-volatile int16_t  ESP32Sound_Class::loadNext;
+uint16_t          ESP32Sound_Class::chunksize=DEFAULT_CHUNK_SIZE;
+volatile uint32_t ESP32Sound_Class::sampleCounter;
+volatile uint32_t ESP32Sound_Class::lastSample;
 const uint8_t *   ESP32Sound_Class::playFXLoc = NULL;
 volatile uint16_t ESP32Sound_Class::playFXLen = 0;
 volatile uint8_t  ESP32Sound_Class::playStream = 0;
+uint8_t           ESP32Sound_Class::peak=0;
+uint8_t           ESP32Sound_Class::verbosity=0;
 
 
 void IRAM_ATTR ESP32Sound_Class::soundTimer(){
   uint8_t dacValue=127;
+  uint8_t currentAmplitude;
+  static uint8_t peakDecayCount=0;
 
   // mix FX samples
   if (playFXLen) {
@@ -65,28 +67,29 @@ void IRAM_ATTR ESP32Sound_Class::soundTimer(){
 
   // mix streaming samples
   if (playStream) {
-    dacValue+=(buf[sampleCounter]-127)*soundVolume/100;
- //   portENTER_CRITICAL_ISR(&mux);
+    uint8_t cRxedChar;
+    xQueueReceiveFromISR( xQueue,( void * ) &cRxedChar, NULL);
+    dacValue+=(cRxedChar-127)*soundVolume/100;
+    portENTER_CRITICAL_ISR(&mux);
     sampleCounter++;
-    if (sampleCounter == lastSample) {
-      // switch to the other buffer 
-      if (lastSample == bufsize) {
-        sampleCounter=0;
-        loadNext=bufsize/2;              
-        lastSample=loadNext;
-      } else {
-        lastSample=bufsize;
-        loadNext=0;
-      }
-      // signal to soundStreamTask that buffer finished -> load next
-      xSemaphoreGiveFromISR(xSemaphore, NULL);    
+    if (sampleCounter >= lastSample) {
+      playStream=0;
     }
-  //  portEXIT_CRITICAL_ISR(&mux);
+    portEXIT_CRITICAL_ISR(&mux);
   }
-  dacWrite(SPEAKER_PIN, dacValue); 
+  dacWrite(SPEAKER_PIN, dacValue);
+
+  // update peak value
+  currentAmplitude= dacValue>127 ? dacValue-127 : 127-dacValue;
+  if (peak < currentAmplitude) peak=currentAmplitude; 
+  peakDecayCount++;
+  if (peakDecayCount==PEAKDECAY_INTERVAL) {
+    peakDecayCount=0;
+    if (peak>0) peak--;
+  }
 
   // check if we finished playing
-  if ((!playFXLen) && (!playStream)) {
+  if ((!playFXLen) && (!playStream) && (!peak)) {
     dacWrite(SPEAKER_PIN, 127);
     timerAlarmDisable(timer); 
   }
@@ -95,9 +98,10 @@ void IRAM_ATTR ESP32Sound_Class::soundTimer(){
 void ESP32Sound_Class::begin(uint16_t samplingrate, uint16_t size)  {
     ledcSetup(TONE_PIN_CHANNEL, 0, 13);
     ledcAttachPin(SPEAKER_PIN, TONE_PIN_CHANNEL);
+    dacWrite(SPEAKER_PIN, 127);
 
-    xSemaphore = xSemaphoreCreateMutex();  
-    Serial.printf("init sound: SR=%d, size=%d\n",samplingrate,size);
+    xQueue = xQueueCreate( size, 1 );
+    if (verbosity) Serial.printf("Init sound: SR=%d, size=%d\n",samplingrate,size);
     bufsize=size;
     timer = timerBegin(0, 80, true);   // prescaler 80 : 1MHz
     timerAlarmDisable(timer);
@@ -107,20 +111,21 @@ void ESP32Sound_Class::begin(uint16_t samplingrate, uint16_t size)  {
 
 void ESP32Sound_Class::playSound(fs::FS &fs, const char * path){
     if (xHandle!=NULL) {
-      Serial.printf("sound already playing!\n");
+      if (verbosity) Serial.printf("sound already playing!\n");
       return;
     }
 
     soundFile = fs.open(path);   
     if(soundFile){
-        Serial.printf("open file %s successful!\n", path);
+        if (verbosity) Serial.printf("open file %s successful!\n", path);
         xTaskCreate(  soundStreamTask,      /* Task function. */
                       "sst1",           /* String with name of task. */
                       4000,             /* Stack size in bytes. */
                       NULL,             /* Parameter passed as input of the task */
                       1,                /* Priority of the task. */
                       &xHandle);            /* Task handle. */                    
-    } else Serial.println("Failed to open file for reading");
+    } 
+    // else if (verbosity) Serial.println("Failed to open file for reading");
 }
 
 boolean ESP32Sound_Class::isPlaying(){
@@ -132,15 +137,24 @@ boolean ESP32Sound_Class::isPlaying(){
     return(false); 
 }
 
+uint8_t ESP32Sound_Class::getPeak(){
+  uint8_t actPeak;
+  portENTER_CRITICAL(&mux);             
+  actPeak=peak;
+  portEXIT_CRITICAL(&mux);
+  return(actPeak); 
+}
 void ESP32Sound_Class::stopSound(){
-    if (xHandle!=NULL) {
-      portENTER_CRITICAL(&mux);             
-      playStream=0;
-      portEXIT_CRITICAL(&mux);             
-      soundFile.close();
-      vTaskDelete( xHandle );
-      xHandle=NULL;
-    }
+  if (verbosity) Serial.println("Stop sound.");
+  if (xHandle!=NULL) {
+    portENTER_CRITICAL(&mux);             
+    playStream=0;
+    portEXIT_CRITICAL(&mux);             
+    soundFile.close();
+    vTaskDelete( xHandle );
+    xHandle=NULL;
+    if (verbosity) Serial.println("SoundstreamTask closed.");
+  }
 }
 
 void ESP32Sound_Class::playFx(const uint8_t * fxBuf){
@@ -168,55 +182,56 @@ void ESP32Sound_Class::setSoundVolume(uint8_t vol){
     portEXIT_CRITICAL(&mux);             
 }
 
+void ESP32Sound_Class::setVerbosity(uint8_t v){
+    portENTER_CRITICAL(&mux);             
+    verbosity=v;
+    portEXIT_CRITICAL(&mux);             
+}
+
 void ESP32Sound_Class::soundStreamTask( void * parameter )
 { 
     uint8_t first=1;
-    uint16_t readsize=bufsize/2;
-    size_t len = 0;
-    uint32_t start = millis();
-    uint32_t end = start;
+    uint8_t chunk[chunksize];
+    int32_t ret=0;
+    int32_t len = 0;
+    int32_t toRead = 0;
 
-    Serial.println("SoundStreamTask created");    
-    if (buf==NULL) buf=(uint8_t *)calloc(bufsize,1);
+    if (verbosity) Serial.println("SoundStreamTask created");    
     len = soundFile.size();
-    size_t flen = len;
-    start = millis();
-    portENTER_CRITICAL(&mux);             
-    loadNext=0;
-    lastSample=readsize;
     sampleCounter=0;
-    portEXIT_CRITICAL(&mux);             
-    while(len>0 ) { 
-        size_t toRead = len;
-        if(toRead > readsize) toRead = readsize;
-        // load half of the buffer (timer ISR is currently processing the other half!)
-        int readbytes=soundFile.read((uint8_t *)buf+loadNext, toRead);
-        if (readbytes < toRead) {
-           Serial.printf("\nread file error, %d of %d bytes read!\n",readbytes,toRead);
-          //Serial.print(*(buf+loadNext));
-          //TBD: handle permanent read problems, e.g. reopen file ?
-        }   
-        if (first) {
-            portENTER_CRITICAL(&mux);             
-            playStream=1;
-            portEXIT_CRITICAL(&mux);             
-            timerAlarmEnable(timer);  // in case timer is currently not running  
-            first=0; 
-        }
-        
-        // wait until timer ISR signals that it read 50% of the buffer
-        xSemaphoreTake( xSemaphore, ( TickType_t ) portMAX_DELAY );
-        len -= toRead;
-    }
-    portENTER_CRITICAL(&mux);             
-    playStream=0;
-    portEXIT_CRITICAL(&mux);             
+    lastSample=len;
+    xQueueReset( xQueue );
 
-    end = millis() - start;
-    Serial.printf("%u bytes read for %u ms\n", flen, end);
+    while (len>0) {
+      if (len > chunksize) toRead=chunksize; else toRead=len;
+      if ((ret=soundFile.read(chunk,toRead)) != toRead) {
+            if (verbosity) Serial.printf("SD read error: %d of %d bytes read\n",ret,toRead);
+            toRead=ret; 
+      } 
+      len-=toRead;
+      int sp; 
+      while ((sp=uxQueueSpacesAvailable (xQueue))<toRead) {
+        if (verbosity) Serial.printf("space in queue: %d/%d .. waiting!\n",sp,toRead);
+        vTaskDelay(WAIT_FOR_QUEUESPACE);
+      }
+      for (int i=0;i<toRead;i++) {
+        xQueueSend(xQueue,( void * ) &(chunk[i]), ( TickType_t ) portMAX_DELAY);
+      }
+      
+      if (first) {
+          portENTER_CRITICAL(&mux);             
+          playStream=1;
+          portEXIT_CRITICAL(&mux);             
+          timerAlarmEnable(timer);  // in case timer is currently not running  
+          if (verbosity) Serial.println("Timer enabled!\n");
+          first=0;
+      } 
+    } 
+                   
+    if (verbosity) Serial.printf("Finished soundfile after  %u bytes.\n", len);
     soundFile.close();
     xHandle=NULL;
     vTaskDelete( NULL );
-}
+} 
 
 ESP32Sound_Class ESP32Sound;

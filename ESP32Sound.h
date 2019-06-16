@@ -11,31 +11,35 @@
 #define SPEAKER_PIN 26
 #define TONE_PIN_CHANNEL 0
 #define DEFAULT_SAMPLINGRATE 16000
-#define DEFAULT_SOUNDBUF_SIZE 4096
+#define DEFAULT_SOUNDBUF_SIZE 4096   // queue size 
+#define DEFAULT_CHUNK_SIZE 512       // samples to read from SD at once 
 #define DEFAULT_SOUND_VOLUME 30
 #define DEFAULT_FX_VOLUME 50
-
+#define PEAKDECAY_INTERVAL 50    // samples to wait for peak auto-decrease
+#define WAIT_FOR_QUEUESPACE 10  // ticks to wait if queue has not enough space 
 
 class ESP32Sound_Class {
 
  private: 
     static hw_timer_t * timer;
-    static SemaphoreHandle_t xSemaphore;
+    static QueueHandle_t xQueue;
     static portMUX_TYPE mux;
     static TaskHandle_t xHandle;
     static void soundTimer();   // the timer ISR
 
     static File soundFile;
-    static uint8_t * buf; //[1024];
+    static uint8_t * buf;
     static uint16_t bufsize;
-    static volatile uint16_t sampleCounter;
-    static volatile uint16_t lastSample;
-    static volatile int16_t loadNext;
+    static uint16_t chunksize;
+    static volatile uint32_t sampleCounter;
+    static volatile uint32_t lastSample;
+    static const uint8_t *   playFXLoc;
     static volatile uint16_t playFXLen;
     static volatile uint8_t playStream;
-    static const uint8_t * playFXLoc;
     static volatile uint8_t fxVolume;
     static volatile uint8_t soundVolume;
+    static uint8_t  peak;
+    static uint8_t  verbosity;
  
   public: 
     // initialize system, set playback rate and buffer size
@@ -47,6 +51,9 @@ class ESP32Sound_Class {
     static void setPlaybackRate(uint16_t pr);    // sets playback rate in samples/sec
     static void setFxVolume(uint8_t vol);        // sets effects volume (in %, 0-255, 100 is original)
     static void setSoundVolume(uint8_t vol);     // sets music volume (in %, 0-255, 100 is original)
+    static void setVerbosity(uint8_t verbosity); // 0: quite, 1:chatty
+    static uint8_t getPeak();                    // gets the current peak volume (0-127)
+
     static void soundStreamTask( void * parameter );
 };
 

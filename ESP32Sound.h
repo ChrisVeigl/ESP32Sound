@@ -8,8 +8,10 @@
 
 #if defined(ESP32)
 
-#define SPEAKER_PIN 26
-#define TONE_PIN_CHANNEL 0
+#include <FS.h>
+
+#define AMP_PIN 25                   // see ODROID-GO schematics
+#define DAC_PIN 26                   // internal DAC2 (pin 26) is used, see ODROID-GO schematics
 #define DEFAULT_SAMPLINGRATE 16000
 #define DEFAULT_SOUNDBUF_SIZE 4096   // queue size 
 #define DEFAULT_CHUNK_SIZE 512       // samples to read from SD at once 

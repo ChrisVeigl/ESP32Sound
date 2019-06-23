@@ -7,14 +7,12 @@
 //
 
 
-#include <odroid_go.h>
 #include "ESP32Sound.h"
 #include "sounds.h"
 
 #define PLAYBACK_RATE  16000
 
 void setup(){
-    GO.begin();
     Serial.begin(115200);
     Serial.println("Now initialising sound system!");
     ESP32Sound.begin(PLAYBACK_RATE);

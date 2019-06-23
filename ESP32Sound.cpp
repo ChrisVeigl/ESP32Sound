@@ -29,9 +29,8 @@
 //  This code is released under GPLv3 license.
 //  see: https://www.gnu.org/licenses/gpl-3.0.en.html and https://www.fsf.org/
 
-#include <odroid_go.h>
+#include <Arduino.h>
 #include "ESP32Sound.h"
-
 
 // definition/initialisation of the static class members 
 // (the class is a static/singleton!)
@@ -77,7 +76,7 @@ void IRAM_ATTR ESP32Sound_Class::soundTimer(){
     }
     portEXIT_CRITICAL_ISR(&mux);
   }
-  dacWrite(SPEAKER_PIN, dacValue);
+  dacWrite(DAC_PIN, dacValue);
 
   // update peak value
   currentAmplitude= dacValue>127 ? dacValue-127 : 127-dacValue;
@@ -90,16 +89,16 @@ void IRAM_ATTR ESP32Sound_Class::soundTimer(){
 
   // check if we finished playing
   if ((!playFXLen) && (!playStream) && (!peak)) {
-    dacWrite(SPEAKER_PIN, 127);
+    dacWrite(DAC_PIN, 127);
     timerAlarmDisable(timer); 
   }
 }
 
 void ESP32Sound_Class::begin(uint16_t samplingrate, uint16_t size)  {
-    ledcSetup(TONE_PIN_CHANNEL, 0, 13);
-    ledcAttachPin(SPEAKER_PIN, TONE_PIN_CHANNEL);
-    dacWrite(SPEAKER_PIN, 127);
 
+    pinMode(AMP_PIN, OUTPUT);
+    digitalWrite(AMP_PIN, HIGH);
+    dacWrite(DAC_PIN, 127);
     xQueue = xQueueCreate( size, 1 );
     if (verbosity) Serial.printf("Init sound: SR=%d, size=%d\n",samplingrate,size);
     bufsize=size;

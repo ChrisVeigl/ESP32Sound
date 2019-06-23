@@ -23,6 +23,8 @@
 #include "sounds.h"
 #include <EEPROM.h>
 
+#define SOUNDFILE "/swan.raw"
+
 //screen dimensions
 #define TFT_X_S           0
 #define TFT_Y_S           20
@@ -58,6 +60,7 @@ uint8_t letterPos=0;
 uint8_t letterIndex=0;
 uint8_t actFxVolume=20;
 uint8_t actSoundVolume=30;
+uint8_t soundAvailable=0;
 
 
 //background
@@ -144,7 +147,7 @@ bool gameEnd = false;
 
 bool gameCd = false;
 bool btnPressed = false;
-int targetFps = 20;
+int targetFps = 100;
 float actualFps;
 
 int targetFpsMs = 1000 / targetFps;
@@ -189,6 +192,8 @@ void setup() {
   ESP32Sound.begin(16000);
   ESP32Sound.setSoundVolume(actSoundVolume);
   ESP32Sound.setFxVolume(actFxVolume);
+
+  if (SD.exists(SOUNDFILE)) soundAvailable = 1; 
   gameInit();  
 }
 
@@ -214,11 +219,11 @@ void loop() {
         }
       }
 
+      
       lstop = millis();
       lastFrameMs = (lstop - lstart);
       actualFps = 1000.0 / lastFrameMs;
-      extraMs = lastFrameMs - targetFpsMs;
-      
+      extraMs = targetFpsMs-lastFrameMs;
       if(extraMs > 0) {
         delay(extraMs);
       }
@@ -456,10 +461,12 @@ void gameLoop() {
   drawPipe();
   drawBird();
   drawScore();
-  if (!ESP32Sound.isPlaying() && !gamePause) {
-    ESP32Sound.playSound(SD, "/swan.raw");
+  if (soundAvailable && !ESP32Sound.isPlaying() && !gamePause) {
+    ESP32Sound.playSound(SD, SOUNDFILE);
   }
 }
+
+
 
 void gameStart() {
   if(dirty) {

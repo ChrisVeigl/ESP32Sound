@@ -179,7 +179,7 @@ void ESP32Sound_Class::playFx(const uint8_t * fxBuf){
     portENTER_CRITICAL(&mux);             
     playFXLoc=fxBuf+4;
     // the length is stored in the first 4 bytes (low byte first)
-    playFXLen= ( ((uint32_t) fxBuf[0]) + ((uint32_t) fxBuf[1]<<8) + ((uint32_t) fxBuf[1]<<16) +((uint32_t) fxBuf[1]<<24));
+    playFXLen= ( ((uint32_t) fxBuf[0]) + ((uint32_t) fxBuf[1]<<8) + ((uint32_t) fxBuf[2]<<16) +((uint32_t) fxBuf[3]<<24));
     portEXIT_CRITICAL(&mux);               
     timerAlarmEnable(timer); // in case timer is currently not running  
 }

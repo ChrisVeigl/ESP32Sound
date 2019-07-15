@@ -3,7 +3,7 @@
 // https://github.com/ChrisVeigl/ESP32Sound
 //
 // This demo plays a music file from SD-Card.
-// Put the file "sound1.raw" from the data folder into the root folder of the SD-card.
+// Put the file "sound1.wav" into the root folder of the SD-card.
 //
 
 
@@ -25,13 +25,12 @@ void setup(){
     }
 
     Serial.println("Now initialising sound system!");
-    ESP32Sound.begin(PLAYBACK_RATE);
-    ESP32Sound.setSoundVolume(80);
+    ESP32Sound.begin();
+    ESP32Sound.setSoundVolume(50);
 }
 
 void loop(){
-    ESP32Sound.playSound(SD, "/sound1.raw");
+    ESP32Sound.playSound(SD, "/sound1.wav");
     while (ESP32Sound.isPlaying());
     delay(1000);
 }
-

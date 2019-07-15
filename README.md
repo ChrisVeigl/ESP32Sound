@@ -7,22 +7,23 @@ and concurrent playback of short sound effects (FX) from flash memory.
 The volume of background music and FX can be set separately.
 Sound playback works "in background" so that the main loop can be
 used for other things (LCD, buttons, WiFi etc.) 
+Please note that the sampling rate of background music and FX files must be the same.
+Although playSound() can handle different .wav files (eg. 44,1Khz, 16bit, stereo), 
+the format 16Khz, mono, 8 bit is recommended (low-bandwidth, low CPU-load).
+The provided python scripts can be used to convert arbitrary .wav files to that format.
 
 ### Preparation/placement of sound files  
-The sound files must be provided in 8-bit, mono, raw format. The sampling rate
-can be chosen on demand, 16000 is recommended (more means more CPU-load). 
-A nice audio tool which can be used to create .raw format from .mp3 or .wav is Audacity. 
-For instructions see [here](https://www.hellomico.com/getting-started/convert-audio-to-raw/).
+The sound files must be provided in .wav format.  
 
-The background music files are placed on the SD card, the file path is given to the
-playSound function as an argument (with a leading slash), eg. *playSound(SD, "/myfile.raw")*
+The background music files can be placed on the SD card, the file path is given to the
+*playSound()* function as an argument with a leading slash, eg. *playSound(SD, "/myfile.wav");*
 
-The FX files are stored in flash memory in a C-array. Only small files should be used.
-A python tool to convert .raw files into C-arrays is provided (*raw2array.py*, see folder **convertTool**). 
-This tool creates the header file *sounds.h* from one or more .raw files, e.g.: ***python raw2array.py sound1.raw sound2.raw sound3.raw***  
-
-Please note that the maximum supported size for FX raw files is 65535 bytes.
+The FX files are stored in flash memory as a C-array. Only small files should be used.
+The python script *wav2array.py* converts .wav files into C-arrays, it creates the header file 
+*sounds.h* from one or more .wav files, eg: ***python raw2array.py sound1.wav sound2.wav sound3.wav***
 After including *sounds.h* into your sketch, you can use *playFX(sound1)*, *playFX(sound2)*, ...
+The python script *wav2wav.py* converts .wav files to 16Khz, mono, 8 bit format.
+
 
 ### Implementation infos  
 The current version of the library uses a timer ISR (called with sampling rate) for feeding the sound-samples 
@@ -35,3 +36,5 @@ Future improvements might use DMA/I2S to increase performance.
 
 This code is released under GPLv3 license.
 see: https://www.gnu.org/licenses/gpl-3.0.en.html and https://www.fsf.org/
+
+

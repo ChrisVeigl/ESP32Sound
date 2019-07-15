@@ -10,7 +10,7 @@
 // More extensions (sound, highscore & bird anim) by CV
 // https://github.com/ChrisVeigl/ESP32Sound
 // 
-// For background music, copy file 'data/swan.raw' to root folder of SD-Card !
+// For background music, copy file 'data/swan.wav' to root folder of SD-Card !
 // Yes! - It's flappy Swan Lake !! ;-)
 // 
 // Use menu and volume button to change fx/music volume.
@@ -23,7 +23,7 @@
 #include "sounds.h"
 #include <EEPROM.h>
 
-#define SOUNDFILE "/swan.raw"
+#define SOUNDFILE "/swan.wav"
 
 //screen dimensions
 #define TFT_X_S           0

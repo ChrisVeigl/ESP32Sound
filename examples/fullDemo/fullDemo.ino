@@ -3,8 +3,8 @@
 // https://github.com/ChrisVeigl/ESP32Sound
 //
 // This demo shows concurrent playback of music and effects + LCD user interface.
-// Put the .raw music file from folder '/data' into the root folder of the SD-card,
-// and/or add other (8-bit, mono, 16Khz) sound files there. 
+// Put the .wav music file from folder '/data' into the root folder of the SD-card,
+// and/or add other .wav sound files there. 
 // See github readme for format conversion infos! 
 //
 
@@ -176,7 +176,7 @@ uint16_t getSoundfiles(fs::FS &fs, const char * dirname, char** fileNames){
     File file = root.openNextFile();
     while(file){
         if(!file.isDirectory()){
-            if (strstr(file.name(),".raw")) {
+            if (strstr(file.name(),".wav")) {
                 Serial.print("  FILE: ");
                 Serial.print(file.name());
                 Serial.print("  SIZE: ");

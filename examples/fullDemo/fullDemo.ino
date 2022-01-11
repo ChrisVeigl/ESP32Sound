@@ -32,7 +32,9 @@ void displayGUI();
 
 
 void setup(){
-    Serial.begin(115200);
+    GO.begin();
+    // Serial.begin(115200);
+    delay(500);
     Serial.println("Now initialising SD card!");
     if(!SD.begin()){
         Serial.println("Card Mount Failed");
@@ -47,7 +49,6 @@ void setup(){
     Serial.printf("We have %d soundfiles!\n",soundfileCount);
     
     Serial.println("Now initializing LCD etc.");
-    GO.begin();
     displayGUI();
 
     Serial.println("Now initialising sound system!");

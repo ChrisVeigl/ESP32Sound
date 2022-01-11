@@ -12,6 +12,11 @@ Although playSound() can handle different .wav files (eg. 44,1Khz, 16bit, stereo
 the format 16Khz, mono, 8 bit is recommended (low-bandwidth, low CPU-load).
 The provided python scripts can be used to convert arbitrary .wav files to that format.
 
+### Installation
+* install ESP32 board support in Arduino, see https://randomnerdtutorials.com/installing-the-esp32-board-in-arduino-ide-windows-instructions/
+* git clone https://github.com/hardkernel/ODROID-GO.git into your Arduino libraries folder
+* git clone https://github.com/ChrisVeigl/ESP32Sound.git into your Arduino libraries folder
+
 ### Preparation/placement of sound files  
 The sound files must be provided in .wav format.  
 

@@ -173,7 +173,8 @@ long gamePauseStart;
 const int chipSelect = 7;
 
 void setup() {
-  Serial.begin(115200);
+  GO.begin();
+  // Serial.begin(115200);
   delay(500);
   Serial.print("Initializing SD card...");
   // see if the card is present and can be initialized:
@@ -188,7 +189,6 @@ void setup() {
   randomSeed(analogRead(0));   //generate new random seed for the pipe gap
   // gotcha: do this before GO.begin() - else Volume button won't work!
 
-  GO.begin();
   ESP32Sound.begin(16000);
   ESP32Sound.setSoundVolume(actSoundVolume);
   ESP32Sound.setFxVolume(actFxVolume);
